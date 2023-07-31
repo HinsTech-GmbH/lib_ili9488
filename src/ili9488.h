@@ -1,7 +1,7 @@
 /* Interface mode
    - 0: SPI mode (the lcd does not work in 16bit/pixel mode in spi, so you have to write 24bit/pixel)
    - 1: paralell mode */
-#define  ILI9488_INTERFACE        0
+#define  ILI9488_INTERFACE        1
 
 /* Orientation:
    - 0: 320x480 micro-sd in the top (portrait)

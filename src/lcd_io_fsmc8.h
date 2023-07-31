@@ -7,8 +7,8 @@
  */
 
 //=============================================================================
-/* Lcd controll pins assign (A..K, 0..15) */
-#define LCD_RST           X, 0  /* If not used leave it that way */
+/* Lcd control pins assign (A..K, 0..15) */
+#define LCD_RST           D, 6  /* If not used leave it that way */
 
 /* Backlight control
    - BL: A..K, 0..15 (if not used -> X, 0)

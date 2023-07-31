@@ -229,6 +229,7 @@ void ili9488_Init(void)
   LCD_Delay(105);
   LCD_IO_WriteCmd8(ILI9488_SWRESET);
   LCD_Delay(5);
+  
   // positive gamma control
   LCD_IO_WriteCmd8MultipleData8(ILI9488_GMCTRP1, (uint8_t *)"\x00\x03\x09\x08\x16\x0A\x3F\x78\x4C\x09\x0A\x08\x16\x1A\x0F", 15);
   // negative gamma control
@@ -255,15 +256,102 @@ void ili9488_Init(void)
   #endif
   LCD_IO_WriteCmd8(ILI9488_FRMCTR1); LCD_IO_WriteData8(0xA0); // Frame rate (60Hz)
   LCD_IO_WriteCmd8(ILI9488_INVCTR); LCD_IO_WriteData8(0x02); // Display Inversion Control (2-dot)
-  LCD_IO_WriteCmd8MultipleData8(ILI9488_DFUNCTR, (uint8_t *)"\x02\x02", 2); // Display Function Control RGB/MCU Interface Control
+  LCD_IO_WriteCmd8MultipleData8(ILI9488_DFUNCTR, (uint8_t *)"\x02\x02\x3b", 3); // Display Function Control RGB/MCU Interface Control
   LCD_IO_WriteCmd8(ILI9488_IMGFUNCT); LCD_IO_WriteData8(0x00); // Set Image Functio (Disable 24 bit data)
+  //LCD_IO_WriteCmd8(0xB7); LCD_IO_WriteData8(0xC6);  // Entry Mode Set
   LCD_IO_WriteCmd8MultipleData8(ILI9488_ADJCTR3, (uint8_t *)"\xA9\x51\x2C\x82", 4); // Adjust Control (D7 stream, loose)
   LCD_Delay(5);
   LCD_IO_WriteCmd8(ILI9488_SLPOUT);      // Exit Sleep
   LCD_Delay(120);
   LCD_IO_WriteCmd8(ILI9488_DISPON);      // Display on
-  LCD_Delay(5);
+  LCD_Delay(25);
+  //LCD_IO_WriteCmd8(ILI9488_INVOFF);
   LCD_IO_WriteCmd8(ILI9488_MADCTL); LCD_IO_WriteData8(ILI9488_MAD_DATA_RIGHT_THEN_DOWN);
+  
+ /*
+  LCD_IO_WriteCmd8(0xE0); // Positive Gamma Control
+  LCD_IO_WriteData8(0x00);
+  LCD_IO_WriteData8(0x03);
+  LCD_IO_WriteData8(0x09);
+  LCD_IO_WriteData8(0x08);
+  LCD_IO_WriteData8(0x16);
+  LCD_IO_WriteData8(0x0A);
+  LCD_IO_WriteData8(0x3F);
+  LCD_IO_WriteData8(0x78);
+  LCD_IO_WriteData8(0x4C);
+  LCD_IO_WriteData8(0x09);
+  LCD_IO_WriteData8(0x0A);
+  LCD_IO_WriteData8(0x08);
+  LCD_IO_WriteData8(0x16);
+  LCD_IO_WriteData8(0x1A);
+  LCD_IO_WriteData8(0x0F);
+
+  LCD_IO_WriteCmd8(0XE1); // Negative Gamma Control
+  LCD_IO_WriteData8(0x00);
+  LCD_IO_WriteData8(0x16);
+  LCD_IO_WriteData8(0x19);
+  LCD_IO_WriteData8(0x03);
+  LCD_IO_WriteData8(0x0F);
+  LCD_IO_WriteData8(0x05);
+  LCD_IO_WriteData8(0x32);
+  LCD_IO_WriteData8(0x45);
+  LCD_IO_WriteData8(0x46);
+  LCD_IO_WriteData8(0x04);
+  LCD_IO_WriteData8(0x0E);
+  LCD_IO_WriteData8(0x0D);
+  LCD_IO_WriteData8(0x35);
+  LCD_IO_WriteData8(0x37);
+  LCD_IO_WriteData8(0x0F);
+
+  LCD_IO_WriteCmd8(0XC0); // Power Control 1
+  LCD_IO_WriteData8(0x17);
+  LCD_IO_WriteData8(0x15);
+
+  LCD_IO_WriteCmd8(0xC1); // Power Control 2
+  LCD_IO_WriteData8(0x41);
+
+  LCD_IO_WriteCmd8(0xC5); // VCOM Control
+  LCD_IO_WriteData8(0x00);
+  LCD_IO_WriteData8(0x12);
+  LCD_IO_WriteData8(0x80);
+
+  LCD_IO_WriteCmd8(ILI9488_MADCTL); // Memory Access Control
+  LCD_IO_WriteData8(0x48);          // MX, BGR
+
+  LCD_IO_WriteCmd8(0x3A); // Pixel Interface Format
+  LCD_IO_WriteData8(0x55);  // 16 bit colour for parallel
+
+
+  LCD_IO_WriteCmd8(0xB0); // Interface Mode Control
+  LCD_IO_WriteData8(0x00);
+
+  LCD_IO_WriteCmd8(0xB1); // Frame Rate Control
+  LCD_IO_WriteData8(0xA0);
+
+  LCD_IO_WriteCmd8(0xB4); // Display Inversion Control
+  LCD_IO_WriteData8(0x02);
+
+  LCD_IO_WriteCmd8(0xB6); // Display Function Control
+  LCD_IO_WriteData8(0x02);
+  LCD_IO_WriteData8(0x02);
+  LCD_IO_WriteData8(0x3B);
+
+  LCD_IO_WriteCmd8(0xB7); // Entry Mode Set
+  LCD_IO_WriteData8(0xC6);
+
+  LCD_IO_WriteCmd8(0xF7); // Adjust Control 3
+  LCD_IO_WriteData8(0xA9);
+  LCD_IO_WriteData8(0x51);
+  LCD_IO_WriteData8(0x2C);
+  LCD_IO_WriteData8(0x82);
+
+  LCD_IO_WriteCmd8(ILI9488_SLPOUT);  //Exit Sleep
+  LCD_Delay(120);
+
+  LCD_IO_WriteCmd8(ILI9488_DISPON);  //Display on
+  LCD_Delay(25);*/
+
+  printf("Got chip ID: %x\n", ili9488_ReadID());
 }
 
 //-----------------------------------------------------------------------------
@@ -338,7 +426,7 @@ uint16_t ili9488_ReadID(void)
   #elif ILI9488_INTERFACE == 1
   LCD_IO_ReadCmd8MultipleData8(0x04, (uint8_t *)&id, 3, 1);
   #endif
-  // printf("ID:%08X\r\n", (unsigned int)id);
+  printf("ID:%08X\n", (unsigned int)id);
 
   ILI9488_LCDMUTEX_POP();
 
@@ -500,6 +588,9 @@ void ili9488_FillRect(uint16_t Xpos, uint16_t Ypos, uint16_t Xsize, uint16_t Ysi
   #elif ILI9488_INTERFACE == 1
   LCD_IO_WriteCmd8DataFill16(ILI9488_RAMWR, RGBCode, Xsize * Ysize);
   #endif
+
+  printf("pixelval set: %04x\n", RGBCode);
+  printf("pixelval get: %04x\n", ili9488_ReadPixel(Xpos, Ypos));
   ILI9488_LCDMUTEX_POP();
 }
 
