@@ -53,7 +53,7 @@ void LCD_IO_DmaRxCpltCallback(DMA_HandleTypeDef *hdma);
   - Bank4 (NE4) 0x6C000000
   - LCD_REGSELECT_BIT: to which address wire the LCD_RS pin is connected (if the LCD Register Select: A18 -> 18) */
 #define LCD_ADDR_BASE         0x60000000
-#define LCD_REGSELECT_BIT     0
+#define LCD_REGSELECT_BIT     18
 
 /* Data direction
    - 0: only draw mode
