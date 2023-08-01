@@ -2,7 +2,7 @@
    - 0: SPI half duplex (the mosi pin is bidirectional mode)
    - 1: SPI full duplex (write = mosi pin, read = miso pin)
    - 2: paralell 8 bit interface */
-#define ILI9488_INTERFACE     1
+#define ILI9488_INTERFACE     2
 
 /* Orientation:
    - 0: 320x480 micro-sd in the top (portrait)
@@ -19,7 +19,7 @@
 /* Color order
    - 0: RGB
    - 1: BGR */
-#define ILI9488_COLORMODE     1
+#define ILI9488_COLORMODE     0
 
 /* Draw and read bitdeph (16: RGB565, 24: RGB888)
    note: my SPI ILI9488 LCD can only work in 24/24 bit depth

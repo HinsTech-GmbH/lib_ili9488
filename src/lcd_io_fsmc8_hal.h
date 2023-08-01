@@ -61,7 +61,7 @@ void LCD_IO_DmaRxCpltCallback(DMA_HandleTypeDef *hdma);
 #define LCD_DATADIR           0
 
 /* DMA */
-#define LCD_DMA_TX            0
+#define LCD_DMA_TX            1
 #define LCD_DMA_RX            0
 
 /* Memory to memory DMA handle name (see in main.c) */
@@ -96,4 +96,4 @@ void LCD_IO_DmaRxCpltCallback(DMA_HandleTypeDef *hdma);
    note: if 0 -> does not use DMA for 24-bit drawing and reading */
 #define LCD_RGB24_BUFFSIZE    0
 
-#endif // __LCD_IO_FSMC8_H
+#endif // __LCD_IO_FSMC8_H
