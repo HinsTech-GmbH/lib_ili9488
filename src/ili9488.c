@@ -471,7 +471,15 @@ inline void ili9488_write16to24(uint16_t RGBCode)
 void ili9488_WritePixel(uint16_t Xpos, uint16_t Ypos, uint16_t RGBCode)
 {
   ILI9488_LCDMUTEX_PUSH();
-  ILI9488_SETCURSOR(Xpos, Ypos);
+  //ILI9488_SETCURSOR(Xpos, Ypos);
+  //{
+  //  LCD_IO_WriteCmd8(ILI9488_CASET); 
+  //  LCD_IO_WriteData16_to_2x8(ILI9488_MAX_X - Xpos); 
+  //  LCD_IO_WriteData16_to_2x8(ILI9488_MAX_X - Xpos); 
+  //  LCD_IO_WriteCmd8(ILI9488_PASET); 
+  //  LCD_IO_WriteData16_to_2x8(Ypos); 
+  //  LCD_IO_WriteData16_to_2x8(Ypos);
+  //}
   #if ILI9488_INTERFACE == 0
   LCD_IO_WriteCmd8(ILI9488_RAMWR);
   ili9488_write16to24(RGBCode);
