@@ -114,6 +114,8 @@ custom_lcd_ili9488_bitdepth = 24
 
 ```
 
+This library does support using CMSIS OS (FreeRTOS). If you want the ili9488 driver to use CMSIS semaphore and delay functions to wait for DMA and LCD resources in order to run other tasks in the mean time, you can include "cmsis_os.h" in your main.h file. The library will automatically detect the presence of CMSIS OS and use it (also works in RobertoBenjami's library directly).
+
 # Credits and licensing
 
 All the credits for this code go to RobertoBenjami and STMicroelectronics.
