@@ -42,6 +42,8 @@
 #ifndef __LCD_IO_FSMC8_H
 #define __LCD_IO_FSMC8_H
 
+#include "lib_config.h"
+
 void LCD_IO_DmaTxCpltCallback(DMA_HandleTypeDef *hdma);
 void LCD_IO_DmaRxCpltCallback(DMA_HandleTypeDef *hdma);
 
@@ -52,27 +54,27 @@ void LCD_IO_DmaRxCpltCallback(DMA_HandleTypeDef *hdma);
   - Bank3 (NE3) 0x68000000
   - Bank4 (NE4) 0x6C000000
   - LCD_REGSELECT_BIT: to which address wire the LCD_RS pin is connected (if the LCD Register Select: A18 -> 18) */
-#define LCD_ADDR_BASE         0x60000000
-#define LCD_REGSELECT_BIT     18
+#define LCD_ADDR_BASE         PROJCONF_LCD_BASE_ADDRESS
+#define LCD_REGSELECT_BIT     PROJCONF_LCD_RS_ADDRESS_BIT
 
 /* Data direction
    - 0: only draw mode
    - 1: bidirectional mode */
-#define LCD_DATADIR           0
+#define LCD_DATADIR           PROJCONF_LCD_DATA_BIDIRECTIONAL
 
 /* DMA */
-#define LCD_DMA_TX            1
-#define LCD_DMA_RX            0
+#define LCD_DMA_TX            PROJCONF_LCD_USE_DMA_FOR_TX
+#define LCD_DMA_RX            PROJCONF_LCD_USE_DMA_FOR_RX
 
 /* Memory to memory DMA handle name (see in main.c) */
-#define LCD_DMA_HANDLE        hdma_memtomem_dma2_stream0
+#define LCD_DMA_HANDLE        PROJCONF_LCD_DMA_HANDLE
 
 /* In dma mode the bitmap drawing function is completed before the actual drawing.
    When should we wait for the previous DMA operation to complete? (see the readme.me file)
    - 0: DMA check and wait at drawing function start
    - 1: DMA check and wait at drawing function start + bitmap drawing function end wait on (default mode)
    - 2: DMA wait at drawing function end */
-#define LCD_DMA_ENDWAIT       1
+#define LCD_DMA_ENDWAIT       PROJCONF_LCD_DMA_WAIT_MODE
 
 /* Because there are DMA capable and DMA unable memory regions
    here we can set what is the DMA unable region condition
@@ -84,16 +86,16 @@ void LCD_IO_DmaRxCpltCallback(DMA_HandleTypeDef *hdma);
    Example stm32h743 (the DTCMRAM and ITCMRAM are not DMA capable):
      #define LCD_DMA_UNABLE(addr)  (((addr < 0x24000000) && (addr >= 0x20000000)) || (addr < 0x08000000))
    Note: if we ensure that we do not draw a bitmap from a DMA-capable memory area, it is not necessary to set it (leave it that way) */
-#define LCD_DMA_UNABLE(addr)  0
+#define LCD_DMA_UNABLE(addr)  PROJCONF_LCD_DMA_INCAPABLE_SECTION
 
 /* RGB565 to RGB888 and RGB888 to RGB565 convert byte order
    - 0: forward direction
    - 1: back direction
    note: If the red and blue colors are reversed and used 24bit mode, change this value */
-#define LCD_RGB24_ORDER       0
+#define LCD_RGB24_ORDER       PROJCONF_LCD_RGB24_REVERSE_ORDER
 
 /* Pixel buffer size for DMA bitdepth conversion (buffer size [byte] = 3 * pixel buffer size)
    note: if 0 -> does not use DMA for 24-bit drawing and reading */
-#define LCD_RGB24_BUFFSIZE    0
+#define LCD_RGB24_BUFFSIZE    PROJCONF_LCD_RGB24_CONVERSION_BUFFER_SIZE
 
 #endif // __LCD_IO_FSMC8_H

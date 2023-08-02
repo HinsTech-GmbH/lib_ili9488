@@ -332,8 +332,6 @@ void ili9488_Init(void)
   #endif
   LCD_IO_WriteCmd8MultipleData8(ILI9488_DISPON, NULL, 0); // Display on
   LCD_Delay(5);
-  LCD_IO_WriteCmd8MultipleData8(ILI9488_MADCTL, &EntryRightThenDown, 1);
-  LCD_Delay(5);
   LCD_IO_WriteCmd8MultipleData8(ILI9488_INVON, NULL, 0); // Display on
 }
 

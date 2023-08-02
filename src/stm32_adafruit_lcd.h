@@ -58,12 +58,13 @@
 /* Includes ------------------------------------------------------------------*/
 #include "lcd.h"
 #include "fonts/fonts.h"
+#include "lib_config.h"
 
 //-----------------------------------------------------------------------------
 /* Config section (you can change this defines) */
 
 /* LCD default font (Font8 or Font12 or Font16 or Font20 or Font24) */
-#define LCD_DEFAULT_FONT      Font12
+#define LCD_DEFAULT_FONT      PROJCONF_LCD_DEFAULT_FONT
 
 /* Font bitmap buffer size (even for the largest font size, at least one line should fit in it) */
 #define FONTBITMAPBUFSIZE     24 * 16
@@ -72,10 +73,12 @@
 #define MAX_CHAR_LAYER        12
 
 /* LCD default colors */
-#define LCD_DEFAULT_BACKCOLOR LCD_COLOR_BLACK
-#define LCD_DEFAULT_TEXTCOLOR LCD_COLOR_WHITE
+#define LCD_DEFAULT_BACKCOLOR PROJCONF_LCD_DEFAULT_BG_COLOR
+#define LCD_DEFAULT_TEXTCOLOR PROJCONF_LCD_DEFAULT_FG_COLOR
 
 /* LCD clear with LCD_DEFAULT_BACKCOLOR in the BSP_LCD_Init (0:diasble, 1:enable) */
+// PIO library: custom_lcd_clear_on_init does not affect this. This is always off as you can easily do it manually
+// after the BSP_LCD_Init() call. The custom_lcd_clear_on_init option affects the clear in ili9488.h. 
 #define LCD_INIT_CLEAR        0
 
 /* some colors */
