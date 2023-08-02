@@ -33,50 +33,45 @@
   * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   *
   ******************************************************************************
-  */ 
+  */
+
+/*
+ * Modify:
+   - ReadID return type: uint16_t to uint32_t (there is a display that has a 24-bit ID)
+   - Add the LCD_REVERSE16 macro (so that dma can be used on the fsmc 8-bit interface for bitmap drawing)
+ */
 
 /* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef __LCD_H
 #define __LCD_H
 
 #ifdef __cplusplus
- extern "C" {
-#endif 
+extern "C" {
+#endif
+
+//=============================================================================
+/* Setting section (please set the necessary things in this section) */
+
+/* 16bit/pixel data byte order
+   - 0: no change (default)
+   - 1: change
+   note: Enter a value of 1 only if you use an 8-bit fmsc IO driver and want to use DMA to draw bitmap images.
+         The filling operation is DMA capable even with a value of 0.
+   attention: the byte order should also be in reverse order in memory blocks containing images,
+         because the displayed image will be incorrect. This is necessary because DMA can only write to the
+         fsmc 8-bit peripheral in ascending byte order, but the LCD display requires reverse pixel byte order. */
+#define  LCD_REVERSE16     0
+
+//=============================================================================
+/* Interface section */
 
 /* Includes ------------------------------------------------------------------*/
 #include <stdint.h>
-   
-/* The 16 bits values (color codes, bitmap) byte order
- * - 0: ne reverse order
- * - 1: reverse order
- *   note: Using reverse order is only recommended in 8 bit fsmc dma mode so that dma can be turned on. 
-           In all other cases it is disadvantageous.
- */
-#define  LCD_REVERSE16   0
 
-/** @addtogroup BSP
-  * @{
-  */
-
-/** @addtogroup Components
-  * @{
-  */
-
-/** @addtogroup LCD
-  * @{
-  */
- 
-/** @defgroup LCD_Exported_Types
-  * @{
-  */
-
-/** @defgroup LCD_Driver_structure  LCD Driver structure
-  * @{
-  */
 typedef struct
 {
   void     (*Init)(void);
-  uint16_t (*ReadID)(void);
+  uint32_t (*ReadID)(void);
   void     (*DisplayOn)(void);
   void     (*DisplayOff)(void);
   void     (*SetCursor)(uint16_t, uint16_t);
@@ -94,26 +89,8 @@ typedef struct
   void     (*FillRect)(uint16_t, uint16_t, uint16_t, uint16_t, uint16_t);
   void     (*ReadRGBImage)(uint16_t, uint16_t, uint16_t, uint16_t, uint16_t*);
   void     (*Scroll)(int16_t, uint16_t, uint16_t);
+  void     (*UserCommand)(uint16_t, uint8_t*, uint32_t, uint8_t);
 }LCD_DrvTypeDef;    
-/**
-  * @}
-  */
-
-/**
-  * @}
-  */
-
-/**
-  * @}
-  */
-
-/**
-  * @}
-  */
-
-/**
-  * @}
-  */
 
 #ifdef __cplusplus
 }

@@ -14,5 +14,6 @@
         "ststm32"
     ],
     "build": {
+        "extraScript": "lcd_config_options.py"
     }
 }

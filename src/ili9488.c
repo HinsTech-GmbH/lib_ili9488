@@ -1,10 +1,10 @@
 #include "main.h"
 #include "lcd.h"
+#include "lcd_io.h"
 #include "ili9488.h"
 
-// Lcd
 void     ili9488_Init(void);
-uint16_t ili9488_ReadID(void);
+uint32_t ili9488_ReadID(void);
 void     ili9488_DisplayOn(void);
 void     ili9488_DisplayOff(void);
 void     ili9488_SetCursor(uint16_t Xpos, uint16_t Ypos);
@@ -16,15 +16,11 @@ void     ili9488_DrawVLine(uint16_t RGBCode, uint16_t Xpos, uint16_t Ypos, uint1
 uint16_t ili9488_GetLcdPixelWidth(void);
 uint16_t ili9488_GetLcdPixelHeight(void);
 void     ili9488_DrawBitmap(uint16_t Xpos, uint16_t Ypos, uint8_t *pbmp);
-void     ili9488_DrawRGBImage(uint16_t Xpos, uint16_t Ypos, uint16_t Xsize, uint16_t Ysize, uint16_t *pdata);
-void     ili9488_ReadRGBImage(uint16_t Xpos, uint16_t Ypos, uint16_t Xsize, uint16_t Ysize, uint16_t *pdata);
+void     ili9488_DrawRGBImage(uint16_t Xpos, uint16_t Ypos, uint16_t Xsize, uint16_t Ysize, uint16_t *pData);
+void     ili9488_ReadRGBImage(uint16_t Xpos, uint16_t Ypos, uint16_t Xsize, uint16_t Ysize, uint16_t *pData);
 void     ili9488_FillRect(uint16_t Xpos, uint16_t Ypos, uint16_t Xsize, uint16_t Ysize, uint16_t RGBCode);
 void     ili9488_Scroll(int16_t Scroll, uint16_t TopFix, uint16_t BottonFix); 
-
-// Touchscreen
-void     ili9488_ts_Init(uint16_t DeviceAddr);
-uint8_t  ili9488_ts_DetectTouch(uint16_t DeviceAddr);
-void     ili9488_ts_GetXY(uint16_t DeviceAddr, uint16_t *X, uint16_t *Y);
+void     ili9488_UserCommand(uint16_t Command, uint8_t * pData, uint32_t Size, uint8_t Mode);
 
 LCD_DrvTypeDef   ili9488_drv =
 {
@@ -45,9 +41,19 @@ LCD_DrvTypeDef   ili9488_drv =
   ili9488_FillRect,
   ili9488_ReadRGBImage,
   ili9488_Scroll,
+  ili9488_UserCommand
 };
 
 LCD_DrvTypeDef  *lcd_drv = &ili9488_drv;
+
+/* transaction data */
+#define TRANSDATAMAXSIZE  4
+union
+{
+  char       c[TRANSDATAMAXSIZE];
+  uint8_t   d8[TRANSDATAMAXSIZE];
+  uint16_t d16[TRANSDATAMAXSIZE / 2];
+}transdata;
 
 #define ILI9488_NOP           0x00
 #define ILI9488_SWRESET       0x01
@@ -110,8 +116,10 @@ LCD_DrvTypeDef  *lcd_drv = &ili9488_drv;
 
 #define ILI9488_ADJCTR3       0xF7
 
-#define ILI9488_MAD_RGB       0x08
-#define ILI9488_MAD_BGR       0x00
+#define ILI9488_MAD_RGB       0x00
+#define ILI9488_MAD_BGR       0x08
+#define ILI9488_MAD_VREFRORD  0x10
+#define ILI9488_MAD_HREFRORD  0x04
 
 #define ILI9488_MAD_VERTICAL  0x20
 #define ILI9488_MAD_X_LEFT    0x00
@@ -120,100 +128,158 @@ LCD_DrvTypeDef  *lcd_drv = &ili9488_drv;
 #define ILI9488_MAD_Y_DOWN    0x00
 
 #if ILI9488_COLORMODE == 0
-#define ILI9488_MAD_COLORMODE    ILI9488_MAD_RGB
-#else
-#define ILI9488_MAD_COLORMODE    ILI9488_MAD_BGR
+#define ILI9488_MAD_COLORMODE ILI9488_MAD_RGB
+#elif ILI9488_COLORMODE == 1
+#define ILI9488_MAD_COLORMODE ILI9488_MAD_BGR
 #endif
 
-#define LCD_ORIENTATION  ILI9488_ORIENTATION
+#define ILI9488_SETWINDOW(x1, x2, y1, y2) \
+  { transdata.d16[0] = x1; transdata.d16[1] = x2; LCD_IO_WriteCmd8MultipleData16(ILI9488_CASET, (uint16_t *)&transdata, 2); \
+    transdata.d16[0] = y1; transdata.d16[1] = y2; LCD_IO_WriteCmd8MultipleData16(ILI9488_PASET, (uint16_t *)&transdata, 2); }
+
+#define ILI9488_SETCURSOR(x, y) \
+  { transdata.d16[0] = x; transdata.d16[1] = transdata.d16[0]; LCD_IO_WriteCmd8MultipleData16(ILI9488_CASET, (uint16_t *)&transdata, 2); \
+    transdata.d16[0] = y; transdata.d16[1] = transdata.d16[0]; LCD_IO_WriteCmd8MultipleData16(ILI9488_PASET, (uint16_t *)&transdata, 2); }
 
 /* the drawing directions of the 4 orientations */
-#if ILI9488_INTERFACE == 0 /* SPI interface */
-#define ILI9488_SETCURSOR(x, y)            {LCD_IO_WriteCmd8(ILI9488_CASET); LCD_IO_WriteData16_to_2x8(x); LCD_IO_WriteData16_to_2x8(x); LCD_IO_WriteCmd8(ILI9488_PASET); LCD_IO_WriteData16_to_2x8(y); LCD_IO_WriteData16_to_2x8(y);}
-#if (LCD_ORIENTATION == 0)
+#if ILI9488_ORIENTATION == 0
 #define ILI9488_MAX_X                      (ILI9488_LCD_PIXEL_WIDTH - 1)
 #define ILI9488_MAX_Y                      (ILI9488_LCD_PIXEL_HEIGHT - 1)
-#define ILI9488_MAD_DATA_RIGHT_THEN_UP     ILI9488_MAD_COLORMODE | ILI9488_MAD_X_RIGHT | ILI9488_MAD_Y_UP
-#define ILI9488_MAD_DATA_RIGHT_THEN_DOWN   ILI9488_MAD_COLORMODE | ILI9488_MAD_X_RIGHT | ILI9488_MAD_Y_DOWN
-#elif (LCD_ORIENTATION == 1)
+#define ILI9488_MAD_DATA_RIGHT_THEN_UP     (ILI9488_MAD_COLORMODE | ILI9488_MAD_X_RIGHT | ILI9488_MAD_Y_UP)
+#define ILI9488_MAD_DATA_RIGHT_THEN_DOWN   (ILI9488_MAD_COLORMODE | ILI9488_MAD_X_RIGHT | ILI9488_MAD_Y_DOWN)
+#elif ILI9488_ORIENTATION == 1
 #define ILI9488_MAX_X                      (ILI9488_LCD_PIXEL_HEIGHT - 1)
 #define ILI9488_MAX_Y                      (ILI9488_LCD_PIXEL_WIDTH - 1)
-#define ILI9488_MAD_DATA_RIGHT_THEN_UP     ILI9488_MAD_COLORMODE | ILI9488_MAD_X_RIGHT | ILI9488_MAD_Y_DOWN | ILI9488_MAD_VERTICAL
-#define ILI9488_MAD_DATA_RIGHT_THEN_DOWN   ILI9488_MAD_COLORMODE | ILI9488_MAD_X_LEFT  | ILI9488_MAD_Y_DOWN | ILI9488_MAD_VERTICAL
-#elif (LCD_ORIENTATION == 2)
+#define ILI9488_MAD_DATA_RIGHT_THEN_UP     (ILI9488_MAD_COLORMODE | ILI9488_MAD_X_RIGHT | ILI9488_MAD_Y_DOWN | ILI9488_MAD_VERTICAL)
+#define ILI9488_MAD_DATA_RIGHT_THEN_DOWN   (ILI9488_MAD_COLORMODE | ILI9488_MAD_X_LEFT  | ILI9488_MAD_Y_DOWN | ILI9488_MAD_VERTICAL)
+#elif ILI9488_ORIENTATION == 2
 #define ILI9488_MAX_X                      (ILI9488_LCD_PIXEL_WIDTH - 1)
 #define ILI9488_MAX_Y                      (ILI9488_LCD_PIXEL_HEIGHT - 1)
-#define ILI9488_MAD_DATA_RIGHT_THEN_UP     ILI9488_MAD_COLORMODE | ILI9488_MAD_X_LEFT  | ILI9488_MAD_Y_DOWN
-#define ILI9488_MAD_DATA_RIGHT_THEN_DOWN   ILI9488_MAD_COLORMODE | ILI9488_MAD_X_LEFT  | ILI9488_MAD_Y_UP
-#else
+#define ILI9488_MAD_DATA_RIGHT_THEN_UP     (ILI9488_MAD_COLORMODE | ILI9488_MAD_X_LEFT  | ILI9488_MAD_Y_DOWN)
+#define ILI9488_MAD_DATA_RIGHT_THEN_DOWN   (ILI9488_MAD_COLORMODE | ILI9488_MAD_X_LEFT  | ILI9488_MAD_Y_UP)
+#elif ILI9488_ORIENTATION == 3
 #define ILI9488_MAX_X                      (ILI9488_LCD_PIXEL_HEIGHT - 1)
 #define ILI9488_MAX_Y                      (ILI9488_LCD_PIXEL_WIDTH - 1)
-#define ILI9488_MAD_DATA_RIGHT_THEN_UP     ILI9488_MAD_COLORMODE | ILI9488_MAD_X_LEFT  | ILI9488_MAD_Y_UP   | ILI9488_MAD_VERTICAL
-#define ILI9488_MAD_DATA_RIGHT_THEN_DOWN   ILI9488_MAD_COLORMODE | ILI9488_MAD_X_RIGHT | ILI9488_MAD_Y_UP   | ILI9488_MAD_VERTICAL
+#define ILI9488_MAD_DATA_RIGHT_THEN_UP     (ILI9488_MAD_COLORMODE | ILI9488_MAD_X_LEFT  | ILI9488_MAD_Y_UP   | ILI9488_MAD_VERTICAL)
+#define ILI9488_MAD_DATA_RIGHT_THEN_DOWN   (ILI9488_MAD_COLORMODE | ILI9488_MAD_X_RIGHT | ILI9488_MAD_Y_UP   | ILI9488_MAD_VERTICAL)
 #endif
-#elif ILI9488_INTERFACE == 1 /* paralell interface */
-#if (LCD_ORIENTATION == 0)
-#define ILI9488_MAX_X                      (ILI9488_LCD_PIXEL_WIDTH - 1)
-#define ILI9488_MAX_Y                      (ILI9488_LCD_PIXEL_HEIGHT - 1)
-#define ILI9488_MAD_DATA_RIGHT_THEN_UP     ILI9488_MAD_COLORMODE | ILI9488_MAD_X_RIGHT | ILI9488_MAD_Y_UP
-#define ILI9488_MAD_DATA_RIGHT_THEN_DOWN   ILI9488_MAD_COLORMODE | ILI9488_MAD_X_RIGHT | ILI9488_MAD_Y_DOWN
-#define ILI9488_SETCURSOR(x, y)            {LCD_IO_WriteCmd8(ILI9488_CASET); LCD_IO_WriteData16_to_2x8(ILI9488_MAX_X - x); LCD_IO_WriteData16_to_2x8(ILI9488_MAX_X - x); LCD_IO_WriteCmd8(ILI9488_PASET); LCD_IO_WriteData16_to_2x8(y); LCD_IO_WriteData16_to_2x8(y);}
-#elif (LCD_ORIENTATION == 1)
-#define ILI9488_MAX_X                      (ILI9488_LCD_PIXEL_HEIGHT - 1)
-#define ILI9488_MAX_Y                      (ILI9488_LCD_PIXEL_WIDTH - 1)
-#define ILI9488_MAD_DATA_RIGHT_THEN_UP     ILI9488_MAD_COLORMODE | ILI9488_MAD_X_RIGHT | ILI9488_MAD_Y_DOWN | ILI9488_MAD_VERTICAL
-#define ILI9488_MAD_DATA_RIGHT_THEN_DOWN   ILI9488_MAD_COLORMODE | ILI9488_MAD_X_LEFT  | ILI9488_MAD_Y_DOWN | ILI9488_MAD_VERTICAL
-#define ILI9488_SETCURSOR(x, y)            {LCD_IO_WriteCmd8(ILI9488_CASET); LCD_IO_WriteData16_to_2x8(x); LCD_IO_WriteData16_to_2x8(x); LCD_IO_WriteCmd8(ILI9488_PASET); LCD_IO_WriteData16_to_2x8(y); LCD_IO_WriteData16_to_2x8(y);}
-#elif (LCD_ORIENTATION == 2)
-#define ILI9488_MAX_X                      (ILI9488_LCD_PIXEL_WIDTH - 1)
-#define ILI9488_MAX_Y                      (ILI9488_LCD_PIXEL_HEIGHT - 1)
-#define ILI9488_MAD_DATA_RIGHT_THEN_UP     ILI9488_MAD_COLORMODE | ILI9488_MAD_X_LEFT  | ILI9488_MAD_Y_DOWN
-#define ILI9488_MAD_DATA_RIGHT_THEN_DOWN   ILI9488_MAD_COLORMODE | ILI9488_MAD_X_LEFT  | ILI9488_MAD_Y_UP
-#define ILI9488_SETCURSOR(x, y)            {LCD_IO_WriteCmd8(ILI9488_CASET); LCD_IO_WriteData16_to_2x8(x); LCD_IO_WriteData16_to_2x8(x); LCD_IO_WriteCmd8(ILI9488_PASET); LCD_IO_WriteData16_to_2x8(ILI9488_MAX_Y - y); LCD_IO_WriteData16_to_2x8(ILI9488_MAX_Y - y);}
-#else
-#define ILI9488_MAX_X                      (ILI9488_LCD_PIXEL_HEIGHT - 1)
-#define ILI9488_MAX_Y                      (ILI9488_LCD_PIXEL_WIDTH - 1)
-#define ILI9488_MAD_DATA_RIGHT_THEN_UP     ILI9488_MAD_COLORMODE | ILI9488_MAD_X_LEFT  | ILI9488_MAD_Y_UP   | ILI9488_MAD_VERTICAL
-#define ILI9488_MAD_DATA_RIGHT_THEN_DOWN   ILI9488_MAD_COLORMODE | ILI9488_MAD_X_RIGHT | ILI9488_MAD_Y_UP   | ILI9488_MAD_VERTICAL
-#define ILI9488_SETCURSOR(x, y)            {LCD_IO_WriteCmd8(ILI9488_CASET); LCD_IO_WriteData16_to_2x8(ILI9488_MAX_X - x); LCD_IO_WriteData16_to_2x8(ILI9488_MAX_X - x); LCD_IO_WriteCmd8(ILI9488_PASET); LCD_IO_WriteData16_to_2x8(ILI9488_MAX_Y - y); LCD_IO_WriteData16_to_2x8(ILI9488_MAX_Y - y);}
+
+#if ILI9488_INTERFACE == 0 || ILI9488_INTERFACE == 1
+static  uint16_t  yStart, yEnd;
+
+#define SETWINDOW(x1, x2, y1, y2)          ILI9488_SETWINDOW(x1, x2, y1, y2)
+#define SETCURSOR(x, y)                    ILI9488_SETCURSOR(x, y)
+
+#elif ILI9488_INTERFACE == 2
+#if ILI9488_ORIENTATION == 0
+#define SETWINDOW(x1, x2, y1, y2)          ILI9488_SETWINDOW(ILI9488_MAX_X - (x2), ILI9488_MAX_X - (x1), y1, y2)
+#define SETCURSOR(x, y)                    ILI9488_SETCURSOR(ILI9488_MAX_X - (x), y)
+#elif ILI9488_ORIENTATION == 1
+#define SETWINDOW(x1, x2, y1, y2)          ILI9488_SETWINDOW(x1, x2, y1, y2)
+#define SETCURSOR(x, y)                    ILI9488_SETCURSOR(x, y)
+#elif ILI9488_ORIENTATION == 2
+#define SETWINDOW(x1, x2, y1, y2)          ILI9488_SETWINDOW(x1, x2, ILI9488_MAX_Y - (y2), ILI9488_MAX_Y - (y1))
+#define SETCURSOR(x, y)                    ILI9488_SETCURSOR(x, ILI9488_MAX_Y - (y))
+#elif ILI9488_ORIENTATION == 3
+#define SETWINDOW(x1, x2, y1, y2)          ILI9488_SETWINDOW(ILI9488_MAX_X - (x2), ILI9488_MAX_X - (x1), ILI9488_MAX_Y - (y2), ILI9488_MAX_Y - (y1))
+#define SETCURSOR(x, y)                    ILI9488_SETCURSOR(ILI9488_MAX_X - (x), ILI9488_MAX_Y - (y))
 #endif
+#endif
+
+#ifndef LCD_REVERSE16
+#define LCD_REVERSE16    0
 #endif
 
 #define ILI9488_LCD_INITIALIZED    0x01
 #define ILI9488_IO_INITIALIZED     0x02
 static  uint8_t   Is_ili9488_Initialized = 0;
 
-#if      ILI9488_MULTITASK_MUTEX == 1 && ILI9488_TOUCH == 1 && ILI9488_INTERFACE == 1
-volatile uint8_t io_lcd_busy = 0;
-volatile uint8_t io_ts_busy = 0;
-#define  ILI9488_LCDMUTEX_PUSH()    while(io_ts_busy); io_lcd_busy++;
-#define  ILI9488_LCDMUTEX_POP()     io_lcd_busy--
-#else
-#define  ILI9488_LCDMUTEX_PUSH()
-#define  ILI9488_LCDMUTEX_POP()
-#endif
+const uint8_t EntryRightThenUp = ILI9488_MAD_DATA_RIGHT_THEN_UP;
+const uint8_t EntryRightThenDown = ILI9488_MAD_DATA_RIGHT_THEN_DOWN;
 
-#if ILI9488_INTERFACE == 0
-static  uint16_t  yStart, yEnd;
-#endif
+/* the last set drawing direction is stored here */
+uint8_t LastEntry = ILI9488_MAD_DATA_RIGHT_THEN_DOWN;
 
 //-----------------------------------------------------------------------------
-/* Link function for LCD peripheral */
-void     LCD_Delay (uint32_t delay);
-void     LCD_IO_Init(void);
-void     LCD_IO_Bl_OnOff(uint8_t Bl);
+/* Pixel draw and read functions */
 
-void     LCD_IO_WriteCmd8(uint8_t Cmd);
-void     LCD_IO_WriteData8(uint8_t Data);
-void     LCD_IO_WriteData16(uint16_t Data);
-void     LCD_IO_WriteCmd8DataFill16(uint8_t Cmd, uint16_t Data, uint32_t Size);
-void     LCD_IO_WriteCmd8MultipleData8(uint8_t Cmd, uint8_t *pData, uint32_t Size);
-void     LCD_IO_WriteCmd8MultipleData16(uint8_t Cmd, uint16_t *pData, uint32_t Size);
-void     LCD_IO_ReadCmd8MultipleData8(uint8_t Cmd, uint8_t *pData, uint32_t Size, uint32_t DummySize);
-void     LCD_IO_ReadCmd8MultipleData16(uint8_t Cmd, uint16_t *pData, uint32_t Size, uint32_t DummySize);
-void     LCD_IO_ReadCmd8MultipleData24to16(uint8_t Cmd, uint16_t *pData, uint32_t Size, uint32_t DummySize);
+#if ILI9488_WRITEBITDEPTH == ILI9488_READBITDEPTH
+/* 16/16 and 24/24 bit, no need to change bitdepth data */
+#define SetWriteDir()
+#define SetReadDir()
+#else /* #if ILI9488_WRITEBITDEPTH == ILI9488_READBITDEPTH */
+uint8_t lastdir = 0;
+#if ILI9488_WRITEBITDEPTH == 16
+/* 16/24 bit */
+#define SetWriteDir() {                                      \
+  if(lastdir != 0)                                           \
+  {                                                          \
+    LCD_IO_WriteCmd8MultipleData8(ILI9488_PIXFMT, "\55", 1); \
+    lastdir = 0;                                             \
+  }                                                          }
+#define SetReadDir() {                                       \
+  if(lastdir == 0)                                           \
+  {                                                          \
+    LCD_IO_WriteCmd8MultipleData8(ILI9488_PIXFMT, "\66", 1); \
+    lastdir = 1;                                             \
+  }                                                          }
+#elif ILI9488_WRITEBITDEPTH == 24
+/* 24/16 bit */
+#define SetWriteDir() {                                      \
+  if(lastdir != 0)                                           \
+  {                                                          \
+    LCD_IO_WriteCmd8MultipleData8(ILI9488_PIXFMT, "\66", 1); \
+    lastdir = 0;                                             \
+  }                                                          }
+#define SetReadDir() {                                       \
+  if(lastdir == 0)                                           \
+  {                                                          \
+    LCD_IO_WriteCmd8MultipleData8(ILI9488_PIXFMT, "\55", 1); \
+    lastdir = 1;                                             \
+  }                                                          }
+#endif /* #elif ILI9488_WRITEBITDEPTH == 24 */
+#endif /* #else ILI9488_WRITEBITDEPTH == ILI9488_READBITDEPTH */
 
-#define  LCD_IO_WriteData16_to_2x8(dt)    {LCD_IO_WriteData8((dt) >> 8); LCD_IO_WriteData8(dt); }
+#if ILI9488_WRITEBITDEPTH == 16
+#if LCD_REVERSE16 == 0
+#define  LCD_IO_DrawFill(Color, Size) { \
+  SetWriteDir(); \
+  LCD_IO_WriteCmd8DataFill16(ILI9488_RAMWR, Color, Size); }           /* Fill 16 bit pixel(s) */
+#define  LCD_IO_DrawBitmap(pData, Size) { \
+  SetWriteDir(); \
+  LCD_IO_WriteCmd8MultipleData16(ILI9488_RAMWR, pData, Size); }       /* Draw 16 bit bitmap */
+#elif LCD_REVERSE16 == 1
+#define  LCD_IO_DrawFill(Color, Size) { \
+  SetWriteDir(); \
+  LCD_IO_WriteCmd8DataFill16r(ILI9488_RAMWR, Color, Size); }          /* Fill 16 bit pixel(s) */
+#define  LCD_IO_DrawBitmap(pData, Size) { \
+  SetWriteDir(); \
+  LCD_IO_WriteCmd8MultipleData16r(ILI9488_RAMWR, pData, Size); }      /* Draw 16 bit bitmap */
+#endif /* #else LCD_REVERSE16 == 0 */
+#elif ILI9488_WRITEBITDEPTH == 24
+#define  LCD_IO_DrawFill(Color, Size) { \
+  SetWriteDir(); \
+  LCD_IO_WriteCmd8DataFill16to24(ILI9488_RAMWR, Color, Size); }       /* Fill 24 bit pixel(s) from 16 bit color code */
+#define  LCD_IO_DrawBitmap(pData, Size) { \
+  SetWriteDir(); \
+  LCD_IO_WriteCmd8MultipleData16to24(ILI9488_RAMWR, pData, Size); }   /* Draw 24 bit Lcd bitmap from 16 bit bitmap data */
+#endif /* #elif ILI9488_WRITEBITDEPTH == 24 */
+
+#if ILI9488_READBITDEPTH == 16
+#if LCD_REVERSE16 == 0
+#define  LCD_IO_ReadBitmap(pData, Size) { \
+  SetReadDir(); \
+  LCD_IO_ReadCmd8MultipleData16(ILI9488_RAMRD, pData, Size, 1); }     /* Read 16 bit LCD */
+#elif LCD_REVERSE16 == 1
+#define  LCD_IO_ReadBitmap(pData, Size) { \
+  SetReadDir(); \
+  LCD_IO_ReadCmd8MultipleData16r(ILI9488_RAMRD, pData, Size, 1); }    /* Read 16 bit LCD */
+#endif /* #else LCD_REVERSE16 == 0 */
+#elif ILI9488_READBITDEPTH == 24
+#define  LCD_IO_ReadBitmap(pData, Size) { \
+  SetReadDir(); \
+  LCD_IO_ReadCmd8MultipleData24to16(ILI9488_RAMRD, pData, Size, 1); } /* Read 24 bit Lcd and convert to 16 bit bitmap */
+#endif /* #elif ILI9488_READBITDEPTH == 24 */
 
 //-----------------------------------------------------------------------------
 void ili9488_Init(void)
@@ -227,131 +293,51 @@ void ili9488_Init(void)
   }
 
   LCD_Delay(105);
-  LCD_IO_WriteCmd8(ILI9488_SWRESET);
+  LCD_IO_WriteCmd8MultipleData8(ILI9488_SWRESET, NULL, 0);
   LCD_Delay(5);
-  
   // positive gamma control
-  LCD_IO_WriteCmd8MultipleData8(ILI9488_GMCTRP1, (uint8_t *)"\x00\x03\x09\x08\x16\x0A\x3F\x78\x4C\x09\x0A\x08\x16\x1A\x0F", 15);
+  LCD_IO_WriteCmd8MultipleData8(ILI9488_GMCTRP1, (uint8_t *)"\x00\x01\x02\x04\x14\x09\x3F\x57\x4D\x05\x0B\x09\x1A\x1D\x0F", 15);
   // negative gamma control
-  LCD_IO_WriteCmd8MultipleData8(ILI9488_GMCTRN1, (uint8_t *)"\x00\x16\x19\x03\x0F\x05\x32\x45\x46\x04\x0E\x0D\x35\x37\x0F", 15);
+  LCD_IO_WriteCmd8MultipleData8(ILI9488_GMCTRN1, (uint8_t *)"\x00\x1D\x20\x02\x0E\x03\x35\x12\x47\x02\x0D\x0C\x38\x39\x0F", 15);
   // Power Control 1 (Vreg1out, Verg2out)
   LCD_IO_WriteCmd8MultipleData8(ILI9488_PWCTR1, (uint8_t *)"\x17\x15", 2);
   LCD_Delay(5);
   // Power Control 2 (VGH,VGL)
-  LCD_IO_WriteCmd8(ILI9488_PWCTR2); LCD_IO_WriteData8(0x41);
+  LCD_IO_WriteCmd8MultipleData8(ILI9488_PWCTR2, (uint8_t *)"\x41", 1);
   LCD_Delay(5);
   // Power Control 3 (Vcom)
   LCD_IO_WriteCmd8MultipleData8(ILI9488_VMCTR1, (uint8_t *)"\x00\x12\x80", 3);
   LCD_Delay(5);
+  #if ILI9488_WRITEBITDEPTH == 16
+  LCD_IO_WriteCmd8MultipleData8(ILI9488_PIXFMT, (uint8_t *)"\x55", 1);  // Interface Pixel Format (16 bit)
+  #elif ILI9488_WRITEBITDEPTH == 24
+  LCD_IO_WriteCmd8MultipleData8(ILI9488_PIXFMT, (uint8_t *)"\x66", 1);  // Interface Pixel Format (24 bit)
+  #endif
   #if ILI9488_INTERFACE == 0
-  LCD_IO_WriteCmd8(ILI9488_PIXFMT); LCD_IO_WriteData8(0x66); // Interface Pixel Format (24 bit)
-  #if LCD_SPI_MODE != 2
-  // LCD_IO_WriteCmd8(0xFB); LCD_IO_WriteData8(0x80);
-  LCD_IO_WriteCmd8(ILI9488_IMCTR); LCD_IO_WriteData8(0x80); // Interface Mode Control (SDO NOT USE)
-  #else
-  LCD_IO_WriteCmd8(ILI9488_IMCTR); LCD_IO_WriteData8(0x00); // Interface Mode Control (SDO USE)
-  #endif
+  LCD_IO_WriteCmd8MultipleData8(ILI9488_IMCTR, (uint8_t *)"\x80", 1);   // Interface Mode Control (SDO NOT USE)
   #elif ILI9488_INTERFACE == 1
-  LCD_IO_WriteCmd8(ILI9488_PIXFMT); LCD_IO_WriteData8(0x55); // Interface Pixel Format (16 bit)
+  LCD_IO_WriteCmd8MultipleData8(ILI9488_IMCTR, (uint8_t *)"\x00", 1);   // Interface Mode Control (SDO USE)
   #endif
-  LCD_IO_WriteCmd8(ILI9488_FRMCTR1); LCD_IO_WriteData8(0xA0); // Frame rate (60Hz)
-  LCD_IO_WriteCmd8(ILI9488_INVCTR); LCD_IO_WriteData8(0x02); // Display Inversion Control (2-dot)
-  LCD_IO_WriteCmd8MultipleData8(ILI9488_DFUNCTR, (uint8_t *)"\x02\x02\x3b", 3); // Display Function Control RGB/MCU Interface Control
-  LCD_IO_WriteCmd8(ILI9488_IMGFUNCT); LCD_IO_WriteData8(0x00); // Set Image Functio (Disable 24 bit data)
-  //LCD_IO_WriteCmd8(0xB7); LCD_IO_WriteData8(0xC6);  // Entry Mode Set
+  LCD_IO_WriteCmd8MultipleData8(ILI9488_FRMCTR1, (uint8_t *)"\xA0", 1); // Frame rate (60Hz)
+  LCD_IO_WriteCmd8MultipleData8(ILI9488_INVCTR, (uint8_t *)"\x02", 1);  // Display Inversion Control (2-dot)
+  LCD_IO_WriteCmd8MultipleData8(ILI9488_DFUNCTR, (uint8_t *)"\x02\x02", 2); // Display Function Control RGB/MCU Interface Control
+  LCD_IO_WriteCmd8MultipleData8(ILI9488_IMGFUNCT, (uint8_t *)"\x01", 1); // Set Image Functio (Disable 24 bit data)
   LCD_IO_WriteCmd8MultipleData8(ILI9488_ADJCTR3, (uint8_t *)"\xA9\x51\x2C\x82", 4); // Adjust Control (D7 stream, loose)
   LCD_Delay(5);
-  LCD_IO_WriteCmd8(ILI9488_SLPOUT);      // Exit Sleep
+  LCD_IO_WriteCmd8MultipleData8(ILI9488_SLPOUT, NULL, 0); // Exit Sleep
   LCD_Delay(120);
-  LCD_IO_WriteCmd8(ILI9488_DISPON);      // Display on
-  LCD_Delay(25);
-  //LCD_IO_WriteCmd8(ILI9488_INVOFF);
-  LCD_IO_WriteCmd8(ILI9488_MADCTL); LCD_IO_WriteData8(ILI9488_MAD_DATA_RIGHT_THEN_DOWN);
-  
- /*
-  LCD_IO_WriteCmd8(0xE0); // Positive Gamma Control
-  LCD_IO_WriteData8(0x00);
-  LCD_IO_WriteData8(0x03);
-  LCD_IO_WriteData8(0x09);
-  LCD_IO_WriteData8(0x08);
-  LCD_IO_WriteData8(0x16);
-  LCD_IO_WriteData8(0x0A);
-  LCD_IO_WriteData8(0x3F);
-  LCD_IO_WriteData8(0x78);
-  LCD_IO_WriteData8(0x4C);
-  LCD_IO_WriteData8(0x09);
-  LCD_IO_WriteData8(0x0A);
-  LCD_IO_WriteData8(0x08);
-  LCD_IO_WriteData8(0x16);
-  LCD_IO_WriteData8(0x1A);
-  LCD_IO_WriteData8(0x0F);
-
-  LCD_IO_WriteCmd8(0XE1); // Negative Gamma Control
-  LCD_IO_WriteData8(0x00);
-  LCD_IO_WriteData8(0x16);
-  LCD_IO_WriteData8(0x19);
-  LCD_IO_WriteData8(0x03);
-  LCD_IO_WriteData8(0x0F);
-  LCD_IO_WriteData8(0x05);
-  LCD_IO_WriteData8(0x32);
-  LCD_IO_WriteData8(0x45);
-  LCD_IO_WriteData8(0x46);
-  LCD_IO_WriteData8(0x04);
-  LCD_IO_WriteData8(0x0E);
-  LCD_IO_WriteData8(0x0D);
-  LCD_IO_WriteData8(0x35);
-  LCD_IO_WriteData8(0x37);
-  LCD_IO_WriteData8(0x0F);
-
-  LCD_IO_WriteCmd8(0XC0); // Power Control 1
-  LCD_IO_WriteData8(0x17);
-  LCD_IO_WriteData8(0x15);
-
-  LCD_IO_WriteCmd8(0xC1); // Power Control 2
-  LCD_IO_WriteData8(0x41);
-
-  LCD_IO_WriteCmd8(0xC5); // VCOM Control
-  LCD_IO_WriteData8(0x00);
-  LCD_IO_WriteData8(0x12);
-  LCD_IO_WriteData8(0x80);
-
-  LCD_IO_WriteCmd8(ILI9488_MADCTL); // Memory Access Control
-  LCD_IO_WriteData8(0x48);          // MX, BGR
-
-  LCD_IO_WriteCmd8(0x3A); // Pixel Interface Format
-  LCD_IO_WriteData8(0x55);  // 16 bit colour for parallel
-
-
-  LCD_IO_WriteCmd8(0xB0); // Interface Mode Control
-  LCD_IO_WriteData8(0x00);
-
-  LCD_IO_WriteCmd8(0xB1); // Frame Rate Control
-  LCD_IO_WriteData8(0xA0);
-
-  LCD_IO_WriteCmd8(0xB4); // Display Inversion Control
-  LCD_IO_WriteData8(0x02);
-
-  LCD_IO_WriteCmd8(0xB6); // Display Function Control
-  LCD_IO_WriteData8(0x02);
-  LCD_IO_WriteData8(0x02);
-  LCD_IO_WriteData8(0x3B);
-
-  LCD_IO_WriteCmd8(0xB7); // Entry Mode Set
-  LCD_IO_WriteData8(0xC6);
-
-  LCD_IO_WriteCmd8(0xF7); // Adjust Control 3
-  LCD_IO_WriteData8(0xA9);
-  LCD_IO_WriteData8(0x51);
-  LCD_IO_WriteData8(0x2C);
-  LCD_IO_WriteData8(0x82);
-
-  LCD_IO_WriteCmd8(ILI9488_SLPOUT);  //Exit Sleep
-  LCD_Delay(120);
-
-  LCD_IO_WriteCmd8(ILI9488_DISPON);  //Display on
-  LCD_Delay(25);*/
-
-  printf("Got chip ID: %x\n", ili9488_ReadID());
+  LCD_IO_WriteCmd8MultipleData8(ILI9488_MADCTL, &EntryRightThenDown, 1);
+  LCD_Delay(5);
+  #if ILI9488_INITCLEAR == 1
+  ili9488_FillRect(0, 0, ILI9488_MAX_X + 1, ILI9488_MAX_Y + 1, 0x0000);
+  LCD_Delay(1);
+  #endif
+  #if ILI9488_INVERTED == 1
+  LCD_IO_WriteCmd8MultipleData8(ILI9488_INVON, NULL, 0); // Display on
+  LCD_Delay(5);
+  #endif
+  LCD_IO_WriteCmd8MultipleData8(ILI9488_DISPON, NULL, 0); // Display on
+  LCD_Delay(5);
 }
 
 //-----------------------------------------------------------------------------
@@ -362,10 +348,8 @@ void ili9488_Init(void)
   */
 void ili9488_DisplayOn(void)
 {
-  ILI9488_LCDMUTEX_PUSH();
-  LCD_IO_WriteCmd8(ILI9488_SLPOUT);      // Display on
+  LCD_IO_WriteCmd8MultipleData8(ILI9488_SLPOUT, NULL, 0); // Exit Sleep
   LCD_IO_Bl_OnOff(1);
-  ILI9488_LCDMUTEX_POP();
 }
 
 //-----------------------------------------------------------------------------
@@ -376,10 +360,8 @@ void ili9488_DisplayOn(void)
   */
 void ili9488_DisplayOff(void)
 {
-  ILI9488_LCDMUTEX_PUSH();
-  LCD_IO_WriteCmd8(ILI9488_SLPIN);       // Display off
+  LCD_IO_WriteCmd8MultipleData8(ILI9488_SLPIN, NULL, 0); // Sleep
   LCD_IO_Bl_OnOff(0);
-  ILI9488_LCDMUTEX_POP();
 }
 
 //-----------------------------------------------------------------------------
@@ -410,29 +392,16 @@ uint16_t ili9488_GetLcdPixelHeight(void)
   * @param  None
   * @retval The ILI9488 ID
   */
-uint16_t ili9488_ReadID(void)
+uint32_t ili9488_ReadID(void)
 {
   uint32_t id = 0;
-  ILI9488_LCDMUTEX_PUSH();
 
   if(Is_ili9488_Initialized == 0)
   {
     ili9488_Init();
   }
-
-  #if ILI9488_INTERFACE == 0
-  LCD_IO_ReadCmd8MultipleData8(0x04, (uint8_t *)&id, 3, 0);
-  id <<= 1;
-  #elif ILI9488_INTERFACE == 1
   LCD_IO_ReadCmd8MultipleData8(0x04, (uint8_t *)&id, 3, 1);
-  #endif
-  printf("ID:%08X\n", (unsigned int)id);
-
-  ILI9488_LCDMUTEX_POP();
-
-  if(id == 0x00668054)
-    return 0x9488;
-  return 0;
+  return id;
 }
 
 //-----------------------------------------------------------------------------
@@ -444,21 +413,8 @@ uint16_t ili9488_ReadID(void)
   */
 void ili9488_SetCursor(uint16_t Xpos, uint16_t Ypos)
 {
-  ILI9488_LCDMUTEX_PUSH();
-  ILI9488_SETCURSOR(Xpos, Ypos);
-  ILI9488_LCDMUTEX_POP();
+  SETCURSOR(Xpos, Ypos);
 }
-
-/* The SPI mode not capable the 16bpp mode -> convert to 24bpp */
-#if ILI9488_INTERFACE == 0
-extern inline void ili9488_write16to24(uint16_t RGBCode);
-inline void ili9488_write16to24(uint16_t RGBCode)
-{
-  LCD_IO_WriteData8((RGBCode & 0xF800) >> 8);
-  LCD_IO_WriteData8((RGBCode & 0x07E0) >> 3);
-  LCD_IO_WriteData8((RGBCode & 0x001F) << 3);
-}
-#endif
 
 //-----------------------------------------------------------------------------
 /**
@@ -470,23 +426,13 @@ inline void ili9488_write16to24(uint16_t RGBCode)
   */
 void ili9488_WritePixel(uint16_t Xpos, uint16_t Ypos, uint16_t RGBCode)
 {
-  ILI9488_LCDMUTEX_PUSH();
-  //ILI9488_SETCURSOR(Xpos, Ypos);
-  //{
-  //  LCD_IO_WriteCmd8(ILI9488_CASET); 
-  //  LCD_IO_WriteData16_to_2x8(ILI9488_MAX_X - Xpos); 
-  //  LCD_IO_WriteData16_to_2x8(ILI9488_MAX_X - Xpos); 
-  //  LCD_IO_WriteCmd8(ILI9488_PASET); 
-  //  LCD_IO_WriteData16_to_2x8(Ypos); 
-  //  LCD_IO_WriteData16_to_2x8(Ypos);
-  //}
-  #if ILI9488_INTERFACE == 0
-  LCD_IO_WriteCmd8(ILI9488_RAMWR);
-  ili9488_write16to24(RGBCode);
-  #elif ILI9488_INTERFACE == 1
-  LCD_IO_WriteCmd8(ILI9488_RAMWR); LCD_IO_WriteData16(RGBCode);
-  #endif
-  ILI9488_LCDMUTEX_POP();
+  if(LastEntry != ILI9488_MAD_DATA_RIGHT_THEN_DOWN)
+  {
+    LastEntry = ILI9488_MAD_DATA_RIGHT_THEN_DOWN;
+    LCD_IO_WriteCmd8MultipleData8(ILI9488_MADCTL, &EntryRightThenDown, 1);
+  }
+  SETCURSOR(Xpos, Ypos);
+  LCD_IO_DrawFill(RGBCode, 1);
 }
 
 //-----------------------------------------------------------------------------
@@ -498,17 +444,15 @@ void ili9488_WritePixel(uint16_t Xpos, uint16_t Ypos, uint16_t RGBCode)
 uint16_t ili9488_ReadPixel(uint16_t Xpos, uint16_t Ypos)
 {
   uint16_t ret;
-  ILI9488_LCDMUTEX_PUSH();
-  ILI9488_SETCURSOR(Xpos, Ypos);
-  #if ILI9488_INTERFACE == 0
-  LCD_IO_ReadCmd8MultipleData24to16(ILI9488_RAMRD, &ret, 1, 1);
-  #elif ILI9488_INTERFACE == 1
-  LCD_IO_ReadCmd8MultipleData16(ILI9488_RAMRD, &ret, 1, 1);
-  #endif
-  ILI9488_LCDMUTEX_POP();
+  if(LastEntry != ILI9488_MAD_DATA_RIGHT_THEN_DOWN)
+  {
+    LastEntry = ILI9488_MAD_DATA_RIGHT_THEN_DOWN;
+    LCD_IO_WriteCmd8MultipleData8(ILI9488_MADCTL, &EntryRightThenDown, 1);
+  }
+  SETCURSOR(Xpos, Ypos);
+  LCD_IO_ReadBitmap(&ret, 1);
   return ret;
 }
-
 
 //-----------------------------------------------------------------------------
 /**
@@ -521,29 +465,10 @@ uint16_t ili9488_ReadPixel(uint16_t Xpos, uint16_t Ypos)
   */
 void ili9488_SetDisplayWindow(uint16_t Xpos, uint16_t Ypos, uint16_t Width, uint16_t Height)
 {
-  ILI9488_LCDMUTEX_PUSH();
-
-  #if ILI9488_INTERFACE == 0
+  #if ILI9488_INTERFACE == 0 || ILI9488_INTERFACE == 1
   yStart = Ypos; yEnd = Ypos + Height - 1;
-  LCD_IO_WriteCmd8(ILI9488_CASET); LCD_IO_WriteData16_to_2x8(Xpos); LCD_IO_WriteData16_to_2x8(Xpos + Width - 1);
-  LCD_IO_WriteCmd8(ILI9488_PASET); LCD_IO_WriteData16_to_2x8(Ypos); LCD_IO_WriteData16_to_2x8(Ypos + Height - 1);
-  #elif ILI9488_INTERFACE == 1
-  #if (LCD_ORIENTATION == 0)
-  LCD_IO_WriteCmd8(ILI9488_CASET); LCD_IO_WriteData16_to_2x8(ILI9488_LCD_PIXEL_WIDTH - Width - Xpos); LCD_IO_WriteData16_to_2x8(ILI9488_LCD_PIXEL_WIDTH - 1 - Xpos);
-  LCD_IO_WriteCmd8(ILI9488_PASET); LCD_IO_WriteData16_to_2x8(Ypos); LCD_IO_WriteData16_to_2x8(Ypos + Height - 1);
-  #elif (LCD_ORIENTATION == 1)
-  LCD_IO_WriteCmd8(ILI9488_CASET); LCD_IO_WriteData16_to_2x8(Xpos); LCD_IO_WriteData16_to_2x8(Xpos + Width - 1);
-  LCD_IO_WriteCmd8(ILI9488_PASET); LCD_IO_WriteData16_to_2x8(Ypos); LCD_IO_WriteData16_to_2x8(Ypos + Height - 1);
-  #elif (LCD_ORIENTATION == 2)
-  LCD_IO_WriteCmd8(ILI9488_CASET); LCD_IO_WriteData16_to_2x8(Xpos); LCD_IO_WriteData16_to_2x8(Xpos + Width - 1);
-  LCD_IO_WriteCmd8(ILI9488_PASET); LCD_IO_WriteData16_to_2x8(ILI9488_LCD_PIXEL_HEIGHT - Height - Ypos); LCD_IO_WriteData16_to_2x8(ILI9488_LCD_PIXEL_HEIGHT - 1 - Ypos);
-  #else
-  LCD_IO_WriteCmd8(ILI9488_CASET); LCD_IO_WriteData16_to_2x8(ILI9488_LCD_PIXEL_HEIGHT - Width - Xpos); LCD_IO_WriteData16_to_2x8(ILI9488_LCD_PIXEL_HEIGHT - 1 - Xpos);
-  LCD_IO_WriteCmd8(ILI9488_PASET); LCD_IO_WriteData16_to_2x8(ILI9488_LCD_PIXEL_WIDTH - Height - Ypos); LCD_IO_WriteData16_to_2x8(ILI9488_LCD_PIXEL_WIDTH - 1 - Ypos);
   #endif
-  #endif
-
-  ILI9488_LCDMUTEX_POP();
+  SETWINDOW(Xpos, Xpos + Width - 1, Ypos, Ypos + Height - 1);
 }
 
 //-----------------------------------------------------------------------------
@@ -557,6 +482,11 @@ void ili9488_SetDisplayWindow(uint16_t Xpos, uint16_t Ypos, uint16_t Width, uint
   */
 void ili9488_DrawHLine(uint16_t RGBCode, uint16_t Xpos, uint16_t Ypos, uint16_t Length)
 {
+  if(LastEntry != ILI9488_MAD_DATA_RIGHT_THEN_DOWN)
+  {
+    LastEntry = ILI9488_MAD_DATA_RIGHT_THEN_DOWN;
+    LCD_IO_WriteCmd8MultipleData8(ILI9488_MADCTL, &EntryRightThenDown, 1);
+  }
   ili9488_FillRect(Xpos, Ypos, Length, 1, RGBCode);
 }
 
@@ -571,6 +501,11 @@ void ili9488_DrawHLine(uint16_t RGBCode, uint16_t Xpos, uint16_t Ypos, uint16_t 
   */
 void ili9488_DrawVLine(uint16_t RGBCode, uint16_t Xpos, uint16_t Ypos, uint16_t Length)
 {
+  if(LastEntry != ILI9488_MAD_DATA_RIGHT_THEN_DOWN)
+  {
+    LastEntry = ILI9488_MAD_DATA_RIGHT_THEN_DOWN;
+    LCD_IO_WriteCmd8MultipleData8(ILI9488_MADCTL, &EntryRightThenDown, 1);
+  }
   ili9488_FillRect(Xpos, Ypos, 1, Length, RGBCode);
 }
 
@@ -586,20 +521,13 @@ void ili9488_DrawVLine(uint16_t RGBCode, uint16_t Xpos, uint16_t Ypos, uint16_t 
   */
 void ili9488_FillRect(uint16_t Xpos, uint16_t Ypos, uint16_t Xsize, uint16_t Ysize, uint16_t RGBCode)
 {
-  ILI9488_LCDMUTEX_PUSH();
+  if(LastEntry != ILI9488_MAD_DATA_RIGHT_THEN_DOWN)
+  {
+    LastEntry = ILI9488_MAD_DATA_RIGHT_THEN_DOWN;
+    LCD_IO_WriteCmd8MultipleData8(ILI9488_MADCTL, &EntryRightThenDown, 1);
+  }
   ili9488_SetDisplayWindow(Xpos, Ypos, Xsize, Ysize);
-  #if ILI9488_INTERFACE == 0
-  LCD_IO_WriteCmd8(ILI9488_RAMWR);
-  uint32_t XYsize = Xsize * Ysize;
-  while(XYsize--)
-    ili9488_write16to24(RGBCode);
-  #elif ILI9488_INTERFACE == 1
-  LCD_IO_WriteCmd8DataFill16(ILI9488_RAMWR, RGBCode, Xsize * Ysize);
-  #endif
-
-  printf("pixelval set: %04x\n", RGBCode);
-  printf("pixelval get: %04x\n", ili9488_ReadPixel(Xpos, Ypos));
-  ILI9488_LCDMUTEX_POP();
+  LCD_IO_DrawFill(RGBCode, Xsize * Ysize);
 }
 
 //-----------------------------------------------------------------------------
@@ -624,25 +552,19 @@ void ili9488_DrawBitmap(uint16_t Xpos, uint16_t Ypos, uint8_t *pbmp)
   size = (size - index)/2;
   pbmp += index;
 
-  ILI9488_LCDMUTEX_PUSH();
-
-  #if ILI9488_INTERFACE == 0
-  LCD_IO_WriteCmd8(ILI9488_MADCTL); LCD_IO_WriteData8(ILI9488_MAD_DATA_RIGHT_THEN_UP);
-  LCD_IO_WriteCmd8(ILI9488_PASET); LCD_IO_WriteData16_to_2x8(ILI9488_MAX_Y - yEnd); LCD_IO_WriteData16_to_2x8(ILI9488_MAX_Y - yStart);
-  LCD_IO_WriteCmd8(ILI9488_RAMWR);
-  while(size--)
+  if(LastEntry != ILI9488_MAD_DATA_RIGHT_THEN_UP)
   {
-    ili9488_write16to24(*(uint16_t *)pbmp);
-    pbmp+= 2;
+    LastEntry = ILI9488_MAD_DATA_RIGHT_THEN_UP;
+    LCD_IO_WriteCmd8MultipleData8(ILI9488_MADCTL, &EntryRightThenUp, 1);
   }
-  LCD_IO_WriteCmd8(ILI9488_MADCTL); LCD_IO_WriteData8(ILI9488_MAD_DATA_RIGHT_THEN_DOWN);
-  #elif ILI9488_INTERFACE == 1
-  LCD_IO_WriteCmd8(ILI9488_MADCTL); LCD_IO_WriteData8(ILI9488_MAD_DATA_RIGHT_THEN_UP);
-  LCD_IO_WriteCmd8MultipleData16(ILI9488_RAMWR, (uint16_t *)pbmp, size);
-  LCD_IO_WriteCmd8(ILI9488_MADCTL); LCD_IO_WriteData8(ILI9488_MAD_DATA_RIGHT_THEN_DOWN);
+  #if ILI9488_INTERFACE == 0 || ILI9488_INTERFACE == 1
+  transdata.d16[0] = ILI9488_MAX_Y - yEnd;
+  transdata.d16[1] = ILI9488_MAX_Y - yStart;
+  LCD_IO_WriteCmd8MultipleData16(ILI9488_PASET, &transdata, 2);
+  LCD_IO_DrawBitmap(pbmp, size);
+  #elif ILI9488_INTERFACE == 2
+  LCD_IO_DrawBitmap(pbmp, size);
   #endif
-
-  ILI9488_LCDMUTEX_POP();
 }
 
 //-----------------------------------------------------------------------------
@@ -656,25 +578,15 @@ void ili9488_DrawBitmap(uint16_t Xpos, uint16_t Ypos, uint8_t *pbmp)
   * @retval None
   * @brief  Draw direction: right then down
   */
-void ili9488_DrawRGBImage(uint16_t Xpos, uint16_t Ypos, uint16_t Xsize, uint16_t Ysize, uint16_t *pdata)
+void ili9488_DrawRGBImage(uint16_t Xpos, uint16_t Ypos, uint16_t Xsize, uint16_t Ysize, uint16_t *pData)
 {
-  uint32_t size;
-
-  size = (Xsize * Ysize);
-
-  ILI9488_LCDMUTEX_PUSH();
-  ili9488_SetDisplayWindow(Xpos, Ypos, Xsize, Ysize);
-  #if ILI9488_INTERFACE == 0
-  LCD_IO_WriteCmd8(ILI9488_RAMWR);
-  while(size--)
+  if(LastEntry != ILI9488_MAD_DATA_RIGHT_THEN_DOWN)
   {
-    ili9488_write16to24(*pdata);
-    pdata++;
+    LastEntry = ILI9488_MAD_DATA_RIGHT_THEN_DOWN;
+    LCD_IO_WriteCmd8MultipleData8(ILI9488_MADCTL, &EntryRightThenDown, 1);
   }
-  #elif ILI9488_INTERFACE == 1
-  LCD_IO_WriteCmd8MultipleData16(ILI9488_RAMWR, pdata, size);
-  #endif
-  ILI9488_LCDMUTEX_POP();
+  ili9488_SetDisplayWindow(Xpos, Ypos, Xsize, Ysize);
+  LCD_IO_DrawBitmap(pData, Xsize * Ysize);
 }
 
 //-----------------------------------------------------------------------------
@@ -688,18 +600,15 @@ void ili9488_DrawRGBImage(uint16_t Xpos, uint16_t Ypos, uint16_t Xsize, uint16_t
   * @retval None
   * @brief  Draw direction: right then down
   */
-void ili9488_ReadRGBImage(uint16_t Xpos, uint16_t Ypos, uint16_t Xsize, uint16_t Ysize, uint16_t *pdata)
+void ili9488_ReadRGBImage(uint16_t Xpos, uint16_t Ypos, uint16_t Xsize, uint16_t Ysize, uint16_t *pData)
 {
-  uint32_t size = 0;
-  size = (Xsize * Ysize);
-  ILI9488_LCDMUTEX_PUSH();
+  if(LastEntry != ILI9488_MAD_DATA_RIGHT_THEN_DOWN)
+  {
+    LastEntry = ILI9488_MAD_DATA_RIGHT_THEN_DOWN;
+    LCD_IO_WriteCmd8MultipleData8(ILI9488_MADCTL, &EntryRightThenDown, 1);
+  }
   ili9488_SetDisplayWindow(Xpos, Ypos, Xsize, Ysize);
-  #if ILI9488_INTERFACE == 0
-  LCD_IO_ReadCmd8MultipleData24to16(ILI9488_RAMRD, pdata, size, 1);
-  #elif ILI9488_INTERFACE == 1
-  LCD_IO_ReadCmd8MultipleData16(ILI9488_RAMRD, pdata, size, 1);
-  #endif
-  ILI9488_LCDMUTEX_POP();
+  LCD_IO_ReadBitmap(pData, Xsize * Ysize);
 }
 
 //-----------------------------------------------------------------------------
@@ -713,7 +622,6 @@ void ili9488_ReadRGBImage(uint16_t Xpos, uint16_t Ypos, uint16_t Xsize, uint16_t
 void ili9488_Scroll(int16_t Scroll, uint16_t TopFix, uint16_t BottonFix)
 {
   static uint16_t scrparam[4] = {0, 0, 0, 0};
-  ILI9488_LCDMUTEX_PUSH();
   #if (ILI9488_ORIENTATION == 0)
   if((TopFix != scrparam[1]) || (BottonFix != scrparam[3]))
   {
@@ -772,120 +680,25 @@ void ili9488_Scroll(int16_t Scroll, uint16_t TopFix, uint16_t BottonFix)
     scrparam[0] = Scroll;
     LCD_IO_WriteCmd8DataFill16(ILI9488_VSCRSADD, scrparam[0], 1);
   }
-  ILI9488_LCDMUTEX_POP();
-}
-
-//=============================================================================
-#if ILI9488_TOUCH == 1
-
-#include "ts.h"
-
-#define TS_MULTITASK_MUTEX    ILI9488_MULTITASK_MUTEX
-#define TOUCH_FILTER          16
-#define TOUCH_MAXREPEAT       8
-
-#define ABS(N)   (((N)<0) ? (-(N)) : (N))
-
-TS_DrvTypeDef   ili9488_ts_drv =
-{
-  ili9488_ts_Init,
-  0,
-  0,
-  0,
-  ili9488_ts_DetectTouch,
-  ili9488_ts_GetXY,
-  0,
-  0,
-  0,
-  0,
-};
-
-TS_DrvTypeDef  *ts_drv = &ili9488_ts_drv;
-
-#if (LCD_ORIENTATION == 0)
-int32_t  ts_cindex[] = TS_CINDEX_0;
-#elif (LCD_ORIENTATION == 1)
-int32_t  ts_cindex[] = TS_CINDEX_1;
-#elif (LCD_ORIENTATION == 2)
-int32_t  ts_cindex[] = TS_CINDEX_2;
-#elif (LCD_ORIENTATION == 3)
-int32_t  ts_cindex[] = TS_CINDEX_3;
-#endif
-
-uint16_t tx, ty;
-
-/* Link function for Touchscreen */
-uint8_t   TS_IO_DetectToch(void);
-uint16_t  TS_IO_GetX(void);
-uint16_t  TS_IO_GetY(void);
-uint16_t  TS_IO_GetZ1(void);
-uint16_t  TS_IO_GetZ2(void);
-
-//-----------------------------------------------------------------------------
-void ili9488_ts_Init(uint16_t DeviceAddr)
-{
-  if((Is_ili9488_Initialized & ILI9488_IO_INITIALIZED) == 0)
-    LCD_IO_Init();
-  Is_ili9488_Initialized |= ILI9488_IO_INITIALIZED;
 }
 
 //-----------------------------------------------------------------------------
-uint8_t ili9488_ts_DetectTouch(uint16_t DeviceAddr)
+/**
+  * @brief  User command
+  * @param  Command   : Lcd command
+  * @param  pData     : data pointer
+  * @param  Size      : data number
+  * @param  Mode      : 0=write 8bits datas, 1=0=write 16bits datas, 2=read 8bits datas, 3=read 16bits datas
+  * @retval None
+  */
+void ili9488_UserCommand(uint16_t Command, uint8_t* pData, uint32_t Size, uint8_t Mode)
 {
-  static uint8_t ret = 0;
-  int32_t x1, x2, y1, y2, i;
-
-  #if TS_MULTITASK_MUTEX == 1
-  io_ts_busy = 1;
-
-  if(io_lcd_busy)
-  {
-    io_ts_busy = 0;
-    return ret;
-  }
-  #endif
-
-  ret = 0;
-  if(TS_IO_DetectToch())
-  {
-    x1 = TS_IO_GetX();
-    y1 = TS_IO_GetY();
-    i = TOUCH_MAXREPEAT;
-    while(i--)
-    {
-      x2 = TS_IO_GetX();
-      y2 = TS_IO_GetY();
-      if((ABS(x1 - x2) < TOUCH_FILTER) && (ABS(y1 - y2) < TOUCH_FILTER))
-      {
-        x1 = (x1 + x2) >> 1;
-        y1 = (y1 + y2) >> 1;
-        i = 0;
-        if(TS_IO_DetectToch())
-        {
-          tx = x1;
-          ty = y1;
-          ret = 1;
-        }
-      }
-      else
-      {
-        x1 = x2;
-        y1 = y2;
-      }
-    }
-  }
-
-  #if TS_MULTITASK_MUTEX == 1
-  io_ts_busy = 0;
-  #endif
-
-  return ret;
+  if(Mode == 0)
+    LCD_IO_WriteCmd8MultipleData8((uint8_t)Command, pData, Size);
+  else if(Mode == 1)
+    LCD_IO_WriteCmd8MultipleData16((uint8_t)Command, pData, Size);
+  else if(Mode == 2)
+    LCD_IO_ReadCmd8MultipleData8((uint8_t)Command, pData, Size, 1);
+  else if(Mode == 3)
+    LCD_IO_ReadCmd8MultipleData16((uint8_t)Command, pData, Size, 1);
 }
-
-//-----------------------------------------------------------------------------
-void ili9488_ts_GetXY(uint16_t DeviceAddr, uint16_t *X, uint16_t *Y)
-{
-  *X = tx,
-  *Y = ty;
-}
-#endif // #if ILI9488_TOUCH == 1
