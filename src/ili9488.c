@@ -326,13 +326,18 @@ void ili9488_Init(void)
   LCD_Delay(5);
   LCD_IO_WriteCmd8MultipleData8(ILI9488_SLPOUT, NULL, 0); // Exit Sleep
   LCD_Delay(120);
+  LCD_IO_WriteCmd8MultipleData8(ILI9488_MADCTL, &EntryRightThenDown, 1);
+  LCD_Delay(5);
   #if ILI9488_INITCLEAR == 1
   ili9488_FillRect(0, 0, ILI9488_MAX_X + 1, ILI9488_MAX_Y + 1, 0x0000);
   LCD_Delay(1);
   #endif
+  #if ILI9488_INVERTED == 1
+  LCD_IO_WriteCmd8MultipleData8(ILI9488_INVON, NULL, 0); // Display on
+  LCD_Delay(5);
+  #endif
   LCD_IO_WriteCmd8MultipleData8(ILI9488_DISPON, NULL, 0); // Display on
   LCD_Delay(5);
-  LCD_IO_WriteCmd8MultipleData8(ILI9488_INVON, NULL, 0); // Display on
 }
 
 //-----------------------------------------------------------------------------

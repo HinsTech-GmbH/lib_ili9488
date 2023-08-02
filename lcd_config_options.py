@@ -76,6 +76,10 @@ lcd_ili9488_colormode = env.GetProjectOption("custom_lcd_ili9488_colormode", "bg
 assert lcd_ili9488_colormode in colormodes, f"custom_lcd_ili9488_colormode must be one of {colormodes}"
 lcd_ili9488_colormode = colormodes[lcd_ili9488_colormode]
 
+lcd_color_inverted = env.GetProjectOption("custom_lcd_color_inverted", "no")
+assert lcd_color_inverted in boolvals, f"custom_lcd_color_inverted must be one of {boolvals}"
+lcd_color_inverted = boolvals[lcd_color_inverted]
+
 lcd_ili9488_bitdepth = env.GetProjectOption("custom_lcd_ili9488_bitdepth", "24")
 assert lcd_ili9488_bitdepth in bitdeph, f"custom_lcd_ili9488_bitdepth must be one of {bitdeph}"
 
@@ -100,6 +104,7 @@ print(" ili9488.h:")
 print(f"  {lcd_ili9488_interface=}")
 print(f"  {lcd_ili9488_orientation=}")
 print(f"  {lcd_ili9488_colormode=}")
+print(f"  {lcd_color_inverted=}")
 print(f"  {lcd_ili9488_bitdepth=}")
 print(f"  {lcd_clear_on_init=}")
 
@@ -124,6 +129,7 @@ flags = [
     f"-DPROJCONF_LCD_ILI9488_ORIENTATION={lcd_ili9488_orientation}",
     f"-DPROJCONF_LCD_CLEAR_ON_INIT={lcd_clear_on_init}",
     f"-DPROJCONF_LCD_ILI9488_COLORMODE={lcd_ili9488_colormode}",
+    f"-DPROJCONF_LCD_COLOR_INVERTED={lcd_color_inverted}",
     f"-DPROJCONF_LCD_ILI9488_BITDEPTH={lcd_ili9488_bitdepth}"
 ]
 

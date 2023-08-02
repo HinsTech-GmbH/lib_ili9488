@@ -101,6 +101,11 @@ custom_lcd_clear_on_init = no
 ; Default: bgr
 custom_lcd_ili9488_colormode = bgr
 
+; Whether to turn color inversion on/off. This simply changes LCD config,
+; has no performance impact. Some LCDs have inverted color otherwise (yes/no)
+; Default: no
+custom_lcd_color_inverted = no
+
 ; Color bit-depth to use for transferring to LCD. This can be 24-bit which works
 ; for any interface (spi or parallel) but 16-bit is more sensible in parallel mode. 
 ; Since we are only supporting parallel for now, 16-bit is advised

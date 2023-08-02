@@ -1,6 +1,7 @@
 /**
  * Modified by melektron:
- * - 230802: Added PIO project config and include guards
+ * - 230802: Added PIO project config, include guards,
+ *           color inversion control.
  */
 
 
@@ -31,6 +32,9 @@
    - 0: RGB
    - 1: BGR */
 #define ILI9488_COLORMODE     PROJCONF_LCD_ILI9488_COLORMODE
+
+/* Color inverted on/off */
+#define ILI9488_INVERTED      PROJCONF_LCD_COLOR_INVERTED
 
 /* Draw and read bitdeph (16: RGB565, 24: RGB888)
    note: my SPI ILI9488 LCD can only work in 24/24 bit depth
