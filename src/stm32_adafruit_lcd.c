@@ -703,7 +703,7 @@ void BSP_LCD_DrawEllipse(uint16_t Xpos, uint16_t Ypos, uint16_t XRadius, uint16_
   * @param  pBmp: Pointer to Bmp picture address
   * @retval None
   */
-void BSP_LCD_DrawBitmap(uint16_t Xpos, uint16_t Ypos, uint8_t *pBmp)
+void BSP_LCD_DrawBitmap(uint16_t Xpos, uint16_t Ypos, const uint8_t *pBmp)
 {
   uint32_t height = 0;
   uint32_t width  = 0;
@@ -1095,7 +1095,7 @@ uint16_t BSP_LCD_ReadPixel(uint16_t Xpos, uint16_t Ypos)
   * @param  *pData: image data pointer
   * @retval None
   */
-void BSP_LCD_DrawRGB16Image(uint16_t Xpos, uint16_t Ypos, uint16_t Xsize, uint16_t Ysize, uint16_t *pData)
+void BSP_LCD_DrawRGB16Image(uint16_t Xpos, uint16_t Ypos, uint16_t Xsize, uint16_t Ysize, const uint16_t *pData)
 {
   lcd_drv->DrawRGBImage(Xpos, Ypos, Xsize, Ysize, pData);
 }

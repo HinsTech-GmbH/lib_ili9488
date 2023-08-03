@@ -1,3 +1,10 @@
+/**
+ * modified by melektron:
+ *  - Added display inversion support @230802
+ *  - Fixed bitmap y coordinate reference frame being inverted in parallel (copied fix from serial also to parallel)
+*/
+
+
 #include "main.h"
 #include "lcd.h"
 #include "lcd_io.h"
@@ -15,8 +22,8 @@ void     ili9488_DrawHLine(uint16_t RGBCode, uint16_t Xpos, uint16_t Ypos, uint1
 void     ili9488_DrawVLine(uint16_t RGBCode, uint16_t Xpos, uint16_t Ypos, uint16_t Length);
 uint16_t ili9488_GetLcdPixelWidth(void);
 uint16_t ili9488_GetLcdPixelHeight(void);
-void     ili9488_DrawBitmap(uint16_t Xpos, uint16_t Ypos, uint8_t *pbmp);
-void     ili9488_DrawRGBImage(uint16_t Xpos, uint16_t Ypos, uint16_t Xsize, uint16_t Ysize, uint16_t *pData);
+void     ili9488_DrawBitmap(uint16_t Xpos, uint16_t Ypos, const uint8_t *pbmp);
+void     ili9488_DrawRGBImage(uint16_t Xpos, uint16_t Ypos, uint16_t Xsize, uint16_t Ysize, const uint16_t *pData);
 void     ili9488_ReadRGBImage(uint16_t Xpos, uint16_t Ypos, uint16_t Xsize, uint16_t Ysize, uint16_t *pData);
 void     ili9488_FillRect(uint16_t Xpos, uint16_t Ypos, uint16_t Xsize, uint16_t Ysize, uint16_t RGBCode);
 void     ili9488_Scroll(int16_t Scroll, uint16_t TopFix, uint16_t BottonFix); 
@@ -141,12 +148,12 @@ union
   { transdata.d16[0] = x; transdata.d16[1] = transdata.d16[0]; LCD_IO_WriteCmd8MultipleData16(ILI9488_CASET, (uint16_t *)&transdata, 2); \
     transdata.d16[0] = y; transdata.d16[1] = transdata.d16[0]; LCD_IO_WriteCmd8MultipleData16(ILI9488_PASET, (uint16_t *)&transdata, 2); }
 
-/* the drawing directions of the 4 orientations */
+/* the drawing directions of the 4 orientations need different memory access control settings */
 #if ILI9488_ORIENTATION == 0
 #define ILI9488_MAX_X                      (ILI9488_LCD_PIXEL_WIDTH - 1)
 #define ILI9488_MAX_Y                      (ILI9488_LCD_PIXEL_HEIGHT - 1)
-#define ILI9488_MAD_DATA_RIGHT_THEN_UP     (ILI9488_MAD_COLORMODE | ILI9488_MAD_X_LEFT | ILI9488_MAD_Y_UP)
-#define ILI9488_MAD_DATA_RIGHT_THEN_DOWN   (ILI9488_MAD_COLORMODE | ILI9488_MAD_X_LEFT | ILI9488_MAD_Y_DOWN)
+#define ILI9488_MAD_DATA_RIGHT_THEN_UP     (ILI9488_MAD_COLORMODE | ILI9488_MAD_X_RIGHT | ILI9488_MAD_Y_UP)
+#define ILI9488_MAD_DATA_RIGHT_THEN_DOWN   (ILI9488_MAD_COLORMODE | ILI9488_MAD_X_RIGHT | ILI9488_MAD_Y_DOWN)
 #elif ILI9488_ORIENTATION == 1
 #define ILI9488_MAX_X                      (ILI9488_LCD_PIXEL_HEIGHT - 1)
 #define ILI9488_MAX_Y                      (ILI9488_LCD_PIXEL_WIDTH - 1)
@@ -164,27 +171,14 @@ union
 #define ILI9488_MAD_DATA_RIGHT_THEN_DOWN   (ILI9488_MAD_COLORMODE | ILI9488_MAD_X_RIGHT | ILI9488_MAD_Y_UP   | ILI9488_MAD_VERTICAL)
 #endif
 
-#if ILI9488_INTERFACE == 0 || ILI9488_INTERFACE == 1
+// temporary variables needed for bitmap drawing set during window set
+// because bitmap is drawn in reverse.
 static  uint16_t  yStart, yEnd;
 
+// This used to be different depending on the orientation in parallel mode but not in serial.
+// That wasn't really working correctly, so now it is always the same, no reference switches here.
 #define SETWINDOW(x1, x2, y1, y2)          ILI9488_SETWINDOW(x1, x2, y1, y2)
 #define SETCURSOR(x, y)                    ILI9488_SETCURSOR(x, y)
-
-#elif ILI9488_INTERFACE == 2
-#if ILI9488_ORIENTATION == 0
-#define SETWINDOW(x1, x2, y1, y2)          ILI9488_SETWINDOW(x1, x2, y1, y2)
-#define SETCURSOR(x, y)                    ILI9488_SETCURSOR(x, y)
-#elif ILI9488_ORIENTATION == 1
-#define SETWINDOW(x1, x2, y1, y2)          ILI9488_SETWINDOW(x1, x2, y1, y2)
-#define SETCURSOR(x, y)                    ILI9488_SETCURSOR(x, y)
-#elif ILI9488_ORIENTATION == 2
-#define SETWINDOW(x1, x2, y1, y2)          ILI9488_SETWINDOW(x1, x2, ILI9488_MAX_Y - (y2), ILI9488_MAX_Y - (y1))
-#define SETCURSOR(x, y)                    ILI9488_SETCURSOR(x, ILI9488_MAX_Y - (y))
-#elif ILI9488_ORIENTATION == 3
-#define SETWINDOW(x1, x2, y1, y2)          ILI9488_SETWINDOW(ILI9488_MAX_X - (x2), ILI9488_MAX_X - (x1), ILI9488_MAX_Y - (y2), ILI9488_MAX_Y - (y1))
-#define SETCURSOR(x, y)                    ILI9488_SETCURSOR(ILI9488_MAX_X - (x), ILI9488_MAX_Y - (y))
-#endif
-#endif
 
 #ifndef LCD_REVERSE16
 #define LCD_REVERSE16    0
@@ -465,9 +459,8 @@ uint16_t ili9488_ReadPixel(uint16_t Xpos, uint16_t Ypos)
   */
 void ili9488_SetDisplayWindow(uint16_t Xpos, uint16_t Ypos, uint16_t Width, uint16_t Height)
 {
-  #if ILI9488_INTERFACE == 0 || ILI9488_INTERFACE == 1
+  // save the y start/end positions because they need to be modified again for bitmap writes.
   yStart = Ypos; yEnd = Ypos + Height - 1;
-  #endif
   SETWINDOW(Xpos, Xpos + Width - 1, Ypos, Ypos + Height - 1);
 }
 
@@ -539,11 +532,10 @@ void ili9488_FillRect(uint16_t Xpos, uint16_t Ypos, uint16_t Xsize, uint16_t Ysi
   * @retval None
   * @brief  Draw direction: right then up
   */
-void ili9488_DrawBitmap(uint16_t Xpos, uint16_t Ypos, uint8_t *pbmp)
+void ili9488_DrawBitmap(uint16_t Xpos, uint16_t Ypos, const uint8_t *pbmp)
 {
   uint32_t index = 0, size = 0;
   /* Read bitmap size */
-  Ypos += pbmp[22] + (pbmp[23] << 8) - 1;
   size = *(volatile uint16_t *) (pbmp + 2);
   size |= (*(volatile uint16_t *) (pbmp + 4)) << 16;
   /* Get bitmap data address offset */
@@ -552,19 +544,21 @@ void ili9488_DrawBitmap(uint16_t Xpos, uint16_t Ypos, uint8_t *pbmp)
   size = (size - index)/2;
   pbmp += index;
 
+  // switch address order to bottom-to-top because bitmap has reverse order.
   if(LastEntry != ILI9488_MAD_DATA_RIGHT_THEN_UP)
   {
     LastEntry = ILI9488_MAD_DATA_RIGHT_THEN_UP;
     LCD_IO_WriteCmd8MultipleData8(ILI9488_MADCTL, &EntryRightThenUp, 1);
   }
-  #if ILI9488_INTERFACE == 0 || ILI9488_INTERFACE == 1
+  // bitmap is drawn from bottom to top, so in order for y to still be referenced to top
+  // left of screen like everything else, start/end (which were previously set using the set window function) 
+  // needs to be reversed and taken calculated to
+  // be the distance from the bottom most row which is now row 0. This used to just be done for
+  // SPI mode, but it is just as valid for parallel mode.
   transdata.d16[0] = ILI9488_MAX_Y - yEnd;
   transdata.d16[1] = ILI9488_MAX_Y - yStart;
   LCD_IO_WriteCmd8MultipleData16(ILI9488_PASET, &transdata, 2);
   LCD_IO_DrawBitmap(pbmp, size);
-  #elif ILI9488_INTERFACE == 2
-  LCD_IO_DrawBitmap(pbmp, size);
-  #endif
 }
 
 //-----------------------------------------------------------------------------
@@ -578,7 +572,7 @@ void ili9488_DrawBitmap(uint16_t Xpos, uint16_t Ypos, uint8_t *pbmp)
   * @retval None
   * @brief  Draw direction: right then down
   */
-void ili9488_DrawRGBImage(uint16_t Xpos, uint16_t Ypos, uint16_t Xsize, uint16_t Ysize, uint16_t *pData)
+void ili9488_DrawRGBImage(uint16_t Xpos, uint16_t Ypos, uint16_t Xsize, uint16_t Ysize, const uint16_t *pData)
 {
   if(LastEntry != ILI9488_MAD_DATA_RIGHT_THEN_DOWN)
   {
