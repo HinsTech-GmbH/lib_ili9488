@@ -84,8 +84,8 @@ typedef struct
   
   uint16_t (*GetLcdPixelWidth)(void);
   uint16_t (*GetLcdPixelHeight)(void);
-  void     (*DrawBitmap)(uint16_t, uint16_t, uint8_t*);
-  void     (*DrawRGBImage)(uint16_t, uint16_t, uint16_t, uint16_t, uint16_t*);
+  void     (*DrawBitmap)(uint16_t, uint16_t, const uint8_t*);
+  void     (*DrawRGBImage)(uint16_t, uint16_t, uint16_t, uint16_t, const uint16_t*);
   void     (*FillRect)(uint16_t, uint16_t, uint16_t, uint16_t, uint16_t);
   void     (*ReadRGBImage)(uint16_t, uint16_t, uint16_t, uint16_t, uint16_t*);
   void     (*Scroll)(int16_t, uint16_t, uint16_t);
